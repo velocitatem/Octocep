@@ -1,0 +1,28 @@
+{
+  "name": "n8n-dsl-compiler",
+  "version": "0.1.0",
+  "description": "A compiler for converting custom DSL to n8n workflow JSON",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "test": "jest",
+    "compile": "ts-node src/cli.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["n8n", "workflow", "automation", "dsl", "compiler"],
+  "author": "Tricep Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/jest": "^29.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "ts-node": "^10.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "commander": "^11.0.0",
+    "chevrotain": "^11.0.0"
+  }
+}

@@ -1,0 +1,266 @@
+// Social Media Monitoring Workflow
+// Monitors multiple social platforms for brand mentions and responds appropriately
+
+workflow "social-media-monitor" {
+  // Configuration
+  param brandKeywords array = ["mycompany", "mybrand", "myproduct"]
+  param slackWebhook string = env("SLACK_WEBHOOK")
+  param supportEmail string = "[email protected]"
+  param sentimentThreshold number = -0.5 // Negative sentiment threshold
+  
+  // Variables
+  var searchQuery = brandKeywords.join(" OR ")
+  
+  // Scheduled trigger - run every 15 minutes
+  node trigger "trigger.schedule" {
+    cron: "*/15 * * * *"
+    timezone: "UTC"
+  }
+  
+  // Twitter/X monitoring
+  module twitterMonitor = ./modules/twitterSearch.n8n {
+    query: searchQuery
+    maxResults: 20
+    since: "${now(-15, 'minutes')}" // Last 15 minutes
+  }
+  
+  // Reddit monitoring  
+  module redditMonitor = ./modules/redditSearch.n8n {
+    subreddits: ["technology", "business", "reviews"]
+    keywords: brandKeywords
+    timeframe: "hour"
+  }
+  
+  // Combine all mentions
+  node combineMentions "data.transform" {
+    code: `
+      const twitterMentions = $('twitterMonitor').all().map(item => ({
+        ...item.json,
+        platform: 'twitter',
+        timestamp: new Date().toISOString()
+      }));
+      
+      const redditMentions = $('redditMonitor').all().map(item => ({
+        ...item.json,
+        platform: 'reddit',
+        timestamp: new Date().toISOString()
+      }));
+      
+      const allMentions = [...twitterMentions, ...redditMentions];
+      
+      return allMentions.map(mention => ({ json: mention }));
+    `
+  }
+  
+  // Skip if no mentions found
+  node checkMentions "flow.if" {
+    condition: "${combineMentions.output.length} > 0"
+  }
+  
+  // Analyze sentiment for each mention
+  module analyzeSentiment = ./modules/sentimentAnalysis.n8n {
+    text: "${combineMentions.output.text}"
+    language: "en"
+  }
+  
+  // Categorize mentions by sentiment and urgency
+  node categorizeMentions "data.transform" {
+    code: `
+      return items.map(item => {
+        const mention = item.json;
+        const sentiment = mention.sentimentScore;
+        
+        let category = 'neutral';
+        let urgency = 'low';
+        
+        if (sentiment >= 0.3) {
+          category = 'positive';
+          urgency = 'low';
+        } else if (sentiment <= ${sentimentThreshold}) {
+          category = 'negative';
+          urgency = 'high';
+        }
+        
+        // Check for urgent keywords
+        const urgentKeywords = ['complaint', 'bug', 'broken', 'angry', 'terrible'];
+        if (urgentKeywords.some(keyword => 
+          mention.text.toLowerCase().includes(keyword))) {
+          urgency = 'high';
+        }
+        
+        return {
+          json: {
+            ...mention,
+            category,
+            urgency,
+            needsResponse: urgency === 'high' || category === 'negative'
+          }
+        };
+      });
+    `
+  }
+  
+  // Split by urgency
+  node routeByUrgency "flow.switch" {
+    dataProperty: "urgency"
+    rules: [
+      { value: "high", output: 0 },
+      { value: "low", output: 1 }
+    ]
+  }
+  
+  // Handle high-urgency mentions
+  node formatUrgentAlert "data.set" {
+    assignments: {
+      slackMessage: {
+        text: "🚨 Urgent Social Media Mention Alert",
+        blocks: [
+          {
+            type: "header",
+            text: {
+              type: "plain_text",
+              text: "🚨 Urgent Brand Mention"
+            }
+          },
+          {
+            type: "section",
+            fields: [
+              {
+                type: "mrkdwn",
+                text: "*Platform:* ${categorizeMentions.output.platform}"
+              },
+              {
+                type: "mrkdwn", 
+                text: "*Sentiment:* ${categorizeMentions.output.category}"
+              },
+              {
+                type: "mrkdwn",
+                text: "*Author:* ${categorizeMentions.output.author}"
+              },
+              {
+                type: "mrkdwn",
+                text: "*Score:* ${categorizeMentions.output.sentimentScore}"
+              }
+            ]
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "*Message:*\n${categorizeMentions.output.text}"
+            }
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "*Link:* ${categorizeMentions.output.url}"
+            }
+          }
+        ]
+      }
+    }
+  }
+  
+  // Send urgent alert to Slack
+  node sendUrgentSlackAlert "http.request" {
+    method: "POST"
+    url: slackWebhook
+    headers: {
+      "Content-Type": "application/json"
+    }
+    body: "${formatUrgentAlert.output.slackMessage}"
+  }
+  
+  // Email support team for high-priority issues
+  node emailSupportTeam "integration.email" {
+    to: supportEmail
+    subject: "Urgent: Negative Brand Mention Detected"
+    body: `
+      A high-priority social media mention has been detected that requires immediate attention.
+      
+      Platform: ${categorizeMentions.output.platform}
+      Author: ${categorizeMentions.output.author}
+      Sentiment Score: ${categorizeMentions.output.sentimentScore}
+      Category: ${categorizeMentions.output.category}
+      
+      Message:
+      "${categorizeMentions.output.text}"
+      
+      Link: ${categorizeMentions.output.url}
+      
+      Please respond within 2 hours to maintain good customer relations.
+    `
+    bodyType: "text"
+  }
+  
+  // Handle low-urgency mentions - just log to Slack
+  node formatRegularUpdate "data.transform" {
+    code: `
+      const mentions = items;
+      const positive = mentions.filter(m => m.json.category === 'positive').length;
+      const neutral = mentions.filter(m => m.json.category === 'neutral').length;
+      const negative = mentions.filter(m => m.json.category === 'negative').length;
+      
+      return [{
+        json: {
+          text: \`📊 Social Media Monitoring Update (Last 15 min)
+          
+🟢 Positive: \${positive}
+⚪ Neutral: \${neutral}  
+🔴 Negative: \${negative}
+📊 Total: \${mentions.length}
+
+Recent positive mention: "\${mentions.find(m => m.json.category === 'positive')?.json.text.substring(0, 100) || 'None'}..."\`
+        }
+      }];
+    `
+  }
+  
+  // Send regular update to monitoring channel
+  node sendRegularUpdate "http.request" {
+    method: "POST"
+    url: slackWebhook
+    headers: {
+      "Content-Type": "application/json"
+    }
+    body: "${formatRegularUpdate.output}"
+  }
+  
+  // Aggregate daily statistics
+  node aggregateStats "data.set" {
+    assignments: {
+      dailyStats: {
+        date: "${now('yyyy-MM-dd')}"
+        totalMentions: "${combineMentions.output.length}"
+        positiveMentions: "${categorizeMentions.output.filter(m => m.category === 'positive').length}"
+        negativeMentions: "${categorizeMentions.output.filter(m => m.category === 'negative').length}"
+        averageSentiment: "${categorizeMentions.output.map(m => m.sentimentScore).reduce((a, b) => a + b, 0) / categorizeMentions.output.length}"
+        platforms: "${Array.from(new Set(categorizeMentions.output.map(m => m.platform)))}"
+      }
+    }
+  }
+  
+  // Connect the workflow
+  connect trigger -> twitterMonitor
+  connect trigger -> redditMonitor
+  connect twitterMonitor -> combineMentions
+  connect redditMonitor -> combineMentions
+  connect combineMentions -> checkMentions
+  connect checkMentions.true -> analyzeSentiment
+  connect analyzeSentiment -> categorizeMentions
+  connect categorizeMentions -> routeByUrgency
+  connect categorizeMentions -> aggregateStats
+  
+  // High urgency path
+  connect routeByUrgency.output0 -> formatUrgentAlert
+  connect formatUrgentAlert -> sendUrgentSlackAlert
+  connect sendUrgentSlackAlert -> emailSupportTeam
+  
+  // Low urgency path
+  connect routeByUrgency.output1 -> formatRegularUpdate  
+  connect formatRegularUpdate -> sendRegularUpdate
+  
+  // No mentions - end gracefully
+  connect checkMentions.false -> aggregateStats
+}

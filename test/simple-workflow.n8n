@@ -1,0 +1,21 @@
+workflow "simple-test" {
+  param apiUrl string = "https://httpbin.org/json"
+  param emailTo string = "test@example.com"
+
+  node trigger "trigger.manual" {
+  }
+
+  node fetchData "http.request" {
+    method: "GET"
+    url: apiUrl
+  }
+
+  node sendEmail "integration.email" {
+    to: emailTo
+    subject: "Test Email"
+    body: "Data fetched successfully"
+  }
+
+  connect trigger -> fetchData
+  connect fetchData -> sendEmail
+}

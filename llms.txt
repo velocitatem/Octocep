@@ -1,0 +1,673 @@
+# N8N DSL Compiler
+
+The N8N DSL Compiler is a TypeScript-based tool that converts human-readable Domain Specific Language (DSL) workflow definitions into valid n8n JSON format. It provides a Bicep-inspired syntax for creating n8n automation workflows with type safety, validation, and automatic node positioning.
+
+## Overview
+
+The N8N DSL Compiler transforms declarative workflow definitions into executable n8n workflows. It consists of a lexer, parser, code generator, and validation system that ensures generated workflows are syntactically correct and follow n8n conventions.
+
+### Key Features
+- **Bicep-inspired syntax** with familiar programming constructs
+- **Type-safe parameters** with validation and default values
+- **Automatic node positioning** with customizable layout algorithms
+- **Comprehensive validation** with detailed error reporting
+- **CLI tool** for compilation, validation, and code generation
+- **Extensible architecture** supporting custom node types and modules
+
+### Architecture
+
+```
+┌─────────────┐    ┌──────────┐    ┌───────────┐    ┌─────────────┐
+│   DSL Code  │ → │  Lexer   │ → │  Parser   │ → │ Generator   │
+│             │    │          │    │           │    │             │
+│ workflow.n8n│    │ Tokens   │    │   AST     │    │ n8n JSON    │
+└─────────────┘    └──────────┘    └───────────┘    └─────────────┘
+                                          │
+                                          ▼
+                                   ┌───────────┐
+                                   │Validator  │
+                                   │           │
+                                   │ Errors    │
+                                   └───────────┘
+```
+
+## DSL Syntax Reference
+
+### Workflow Declaration
+```bicep
+workflow "workflow-name" {
+  // Workflow content
+}
+```
+
+### Parameters
+Parameters make workflows configurable and reusable:
+
+```bicep
+param apiUrl string = "https://api.example.com"    // Optional with default
+param emailTo string                               // Required parameter
+param retryCount number = 3                        // Number parameter
+param enableLogging boolean = true                 // Boolean parameter
+param recipients array = ["admin@company.com"]     // Array parameter
+param config object = { debug: true }             // Object parameter
+```
+
+**Parameter Validation:**
+```bicep
+param email string {
+  pattern: "^[^@]+@[^@]+\\.[^@]+$"
+  description: "Valid email address"
+}
+
+param batchSize number {
+  min: 1
+  max: 1000
+  default: 100
+}
+```
+
+### Variables
+Computed values and expressions:
+```bicep
+var timestamp = now()
+var apiEndpoint = "https://api.${domain}/v1"
+var emailSubject = "Report for ${now('yyyy-MM-dd')}"
+```
+
+### Node Declarations
+
+**Inline Nodes:**
+```bicep
+node nodeName "node.type" {
+  param1: "value"
+  param2: 123
+  param3: {
+    nested: "object"
+  }
+}
+```
+
+**Module Nodes (Reusable):**
+```bicep
+module fetchData = ./modules/httpGet.n8n {
+  url: apiUrl
+  headers: {
+    "Authorization": "Bearer ${token}"
+  }
+}
+```
+
+### Connections
+Connect nodes using arrow syntax:
+```bicep
+connect sourceNode -> targetNode
+connect sourceNode.output -> targetNode.input
+connect checkData.true -> processSuccess
+connect checkData.false -> processFailure
+```
+
+## Supported Node Types
+
+### Trigger Nodes
+| DSL Type | n8n Type | Description |
+|----------|----------|-------------|
+| `trigger.manual` | `n8n-nodes-base.manualTrigger` | Manual workflow trigger |
+| `trigger.schedule` | `n8n-nodes-base.scheduleTrigger` | Cron-based scheduling |
+| `trigger.webhook` | `n8n-nodes-base.webhook` | HTTP webhook receiver |
+| `trigger.form` | `n8n-nodes-base.formTrigger` | Form submission trigger |
+
+### Core Processing Nodes
+| DSL Type | n8n Type | Description |
+|----------|----------|-------------|
+| `http.request` | `n8n-nodes-base.httpRequest` | HTTP API calls |
+| `data.set` | `n8n-nodes-base.set` | Set/transform data values |
+| `data.transform` | `n8n-nodes-base.code` | JavaScript code execution |
+| `flow.if` | `n8n-nodes-base.if` | Conditional branching |
+| `flow.switch` | `n8n-nodes-base.switch` | Multi-way branching |
+
+### Integration Nodes
+| DSL Type | n8n Type | Description |
+|----------|----------|-------------|
+| `integration.email` | `n8n-nodes-base.gmail` | Email sending via Gmail |
+| `integration.sheets` | `n8n-nodes-base.googleSheets` | Google Sheets operations |
+| `integration.slack` | `n8n-nodes-base.slack` | Slack messaging |
+
+## Node Parameter Mapping
+
+The compiler automatically maps DSL parameters to n8n's expected parameter structure:
+
+### HTTP Request Node
+```bicep
+node fetchData "http.request" {
+  method: "POST"
+  url: "https://api.example.com/data"
+  headers: {
+    "Content-Type": "application/json"
+    "Authorization": "Bearer ${token}"
+  }
+  body: {
+    query: "search terms"
+  }
+}
+```
+
+**Generates n8n parameters:**
+```json
+{
+  "method": "POST",
+  "url": "https://api.example.com/data",
+  "sendHeaders": true,
+  "headerParameters": {
+    "parameters": [
+      {"name": "Content-Type", "value": "application/json"},
+      {"name": "Authorization", "value": "Bearer token123"}
+    ]
+  },
+  "sendBody": true,
+  "bodyParameters": {
+    "parameters": [
+      {"name": "query", "value": "search terms"}
+    ]
+  }
+}
+```
+
+### Gmail Node
+```bicep
+node sendEmail "integration.email" {
+  to: "user@example.com"
+  subject: "Daily Report"
+  body: "Report content here"
+  bodyType: "text"
+}
+```
+
+**Generates n8n parameters:**
+```json
+{
+  "operation": "send",
+  "sendTo": "user@example.com",
+  "subject": "Daily Report", 
+  "message": "Report content here",
+  "emailType": "text"
+}
+```
+
+### IF Node
+```bicep
+node checkStatus "flow.if" {
+  condition: "${response.statusCode} >= 200 && ${response.statusCode} < 300"
+}
+```
+
+**Generates n8n parameters:**
+```json
+{
+  "conditions": {
+    "combinator": "and",
+    "conditions": [
+      {
+        "leftValue": "${response.statusCode}",
+        "operator": {"type": "number", "operation": "largerEqual"},
+        "rightValue": "200"
+      }
+    ]
+  }
+}
+```
+
+## Built-in Functions
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `now()` | Current timestamp | `now()` |
+| `now(timezone)` | Timestamp in timezone | `now("Europe/Prague")` |
+| `now(format)` | Formatted timestamp | `now("yyyy-MM-dd")` |
+| `env(varName)` | Environment variable | `env("API_KEY")` |
+| `file(path)` | Read file content | `file("./script.js")` |
+
+## Expression System
+
+### Template Expressions
+```bicep
+subject: "Report for ${now('yyyy-MM-dd')}"
+url: "https://api.${domain}/users/${userId}"
+condition: "${fetchData.output.count} > ${threshold}"
+```
+
+### Conditional Expressions
+```bicep
+var apiUrl = environment == "production" 
+  ? "https://api.prod.company.com" 
+  : "https://api.dev.company.com"
+```
+
+## Complete Example Workflows
+
+### Simple API to Email Workflow
+```bicep
+workflow "daily-report" {
+  param apiUrl string = "https://api.acme.com/stats"
+  param recipientEmail string = "admin@company.com"
+  param apiToken string = env("API_TOKEN")
+  
+  node trigger "trigger.schedule" {
+    cron: "0 9 * * *"
+  }
+  
+  node fetchData "http.request" {
+    method: "GET"
+    url: apiUrl
+    headers: {
+      "Authorization": "Bearer ${apiToken}"
+    }
+  }
+  
+  node sendReport "integration.email" {
+    to: recipientEmail
+    subject: "Daily Stats Report - ${now('MMM d, yyyy')}"
+    body: "Stats retrieved: ${fetchData.output.body}"
+  }
+  
+  connect trigger -> fetchData
+  connect fetchData -> sendReport
+}
+```
+
+### Complex Conditional Workflow
+```bicep
+workflow "lead-processor" {
+  param crmApiUrl string = "https://api.crm.com/v1"
+  param salesEmail string = "sales@company.com"
+  param leadScoreThreshold number = 75
+  
+  node webhook "trigger.webhook" {
+    path: "/leads/process"
+    method: "POST"
+  }
+  
+  node validateLead "flow.if" {
+    condition: "${webhook.output.email} != null && ${webhook.output.company} != null"
+  }
+  
+  node calculateScore "data.transform" {
+    code: `
+      const lead = items[0].json;
+      let score = 0;
+      
+      if (lead.company_size > 1000) score += 30;
+      if (lead.job_title.includes('CEO')) score += 25;
+      if (lead.industry === 'technology') score += 20;
+      
+      return [{ json: { ...lead, leadScore: score } }];
+    `
+  }
+  
+  node routeByScore "flow.if" {
+    condition: "${calculateScore.output.leadScore} >= ${leadScoreThreshold}"
+  }
+  
+  node addToCrm "http.request" {
+    method: "POST"
+    url: "${crmApiUrl}/leads"
+    headers: {
+      "Authorization": "Bearer ${env('CRM_API_KEY')}"
+      "Content-Type": "application/json"
+    }
+    body: {
+      email: "${webhook.output.email}"
+      company: "${webhook.output.company}"
+      score: "${calculateScore.output.leadScore}"
+    }
+  }
+  
+  node notifySales "integration.email" {
+    to: salesEmail
+    subject: "High-Priority Lead: ${webhook.output.company}"
+    body: "New qualified lead with score ${calculateScore.output.leadScore}"
+  }
+  
+  node sendRejection "integration.email" {
+    to: "${webhook.output.email}"
+    subject: "Thank you for your interest"
+    body: "We'll be in touch soon regarding your inquiry."
+  }
+  
+  connect webhook -> validateLead
+  connect validateLead.true -> calculateScore
+  connect calculateScore -> routeByScore
+  connect routeByScore.true -> addToCrm
+  connect addToCrm -> notifySales
+  connect routeByScore.false -> sendRejection
+  connect validateLead.false -> sendRejection
+}
+```
+
+## CLI Usage
+
+### Installation
+```bash
+npm install
+npm run build
+```
+
+### Compilation
+```bash
+# Compile DSL to n8n JSON
+npx ts-node src/cli.ts compile workflow.n8n -o output.json
+
+# With validation and strict mode
+npx ts-node src/cli.ts compile workflow.n8n -o output.json --strict
+
+# Disable auto-layout
+npx ts-node src/cli.ts compile workflow.n8n --no-auto-layout --spacing 300
+```
+
+### Validation
+```bash
+# Validate DSL syntax without compilation
+npx ts-node src/cli.ts validate workflow.n8n
+```
+
+### Code Generation
+```bash
+# Generate example workflows
+npx ts-node src/cli.ts example --type simple --output simple-example.n8n
+npx ts-node src/cli.ts example --type complex --output complex-example.n8n
+```
+
+## Library Usage
+
+### TypeScript/JavaScript
+```typescript
+import { Compiler, ValidationError } from './src/compiler';
+
+const dslCode = `
+workflow "example" {
+  param apiUrl string = "https://api.example.com"
+  
+  node trigger "trigger.manual" {}
+  
+  node request "http.request" {
+    method: "GET"
+    url: apiUrl
+  }
+  
+  node email "integration.email" {
+    to: "user@example.com"
+    subject: "API Response"
+    body: "Response: ${request.output.body}"
+  }
+  
+  connect trigger -> request
+  connect request -> email
+}
+`;
+
+const compiler = new Compiler({
+  validate: true,
+  autoLayout: true,
+  spacing: 200
+});
+
+const result = compiler.compile(dslCode);
+
+if (result.success) {
+  console.log('Generated n8n workflow:');
+  console.log(JSON.stringify(result.workflow, null, 2));
+  
+  // Import directly into n8n
+  // Copy result.workflow JSON and paste into n8n import dialog
+} else {
+  console.error('Compilation failed:');
+  result.errors.forEach(error => {
+    console.error(`${error.type}: ${error.message} (line ${error.line})`);
+  });
+}
+```
+
+### Quick Compilation
+```typescript
+import { compileDslToN8n } from './src/index';
+
+try {
+  const n8nJson = compileDslToN8n(dslCode, { validate: true });
+  console.log('Ready to import:', n8nJson);
+} catch (error) {
+  console.error('Compilation failed:', error.message);
+}
+```
+
+## Error Handling and Validation
+
+### Syntax Errors
+```
+Error: Expected IDENTIFIER but got STRING at line 16, column 8
+Error: Duplicate node name: fetchData at line 23, column 7
+```
+
+### Semantic Validation
+```
+Warning: Node 'processData' is not connected to any other nodes at line 45, column 3
+Error: Connection source node 'invalidNode' does not exist at line 67, column 12
+```
+
+### Runtime Validation
+The compiler validates:
+- **Syntax correctness** - proper DSL grammar
+- **Semantic validity** - node references, parameter types
+- **n8n compatibility** - generated JSON structure
+- **Best practices** - workflow design patterns
+
+## Module System (Planned)
+
+### Module Definition
+```bicep
+// modules/httpWithRetry.n8n
+module "httpWithRetry" {
+  param url string
+  param retries number = 3
+  param timeout number = 30000
+  
+  node request "http.request" {
+    url: url
+    timeout: timeout
+    continueOnFail: true
+  }
+  
+  node checkSuccess "flow.if" {
+    condition: "${request.output.statusCode} >= 200 && ${request.output.statusCode} < 300"
+  }
+  
+  node retry "flow.if" {
+    condition: "${request.output.attempts} < ${retries}"
+  }
+  
+  connect request -> checkSuccess
+  connect checkSuccess.false -> retry
+  connect retry.true -> request
+  
+  output success = checkSuccess.output.true
+  output data = request.output.body
+}
+```
+
+### Module Usage
+```bicep
+workflow "with-modules" {
+  module api = ./modules/httpWithRetry.n8n {
+    url: "https://api.example.com/data"
+    retries: 5
+  }
+  
+  connect trigger -> api
+  connect api.success -> processData
+}
+```
+
+## Best Practices
+
+### Workflow Design
+1. **Use descriptive names** for nodes and parameters
+2. **Group related operations** into modules
+3. **Handle errors gracefully** with conditional paths
+4. **Validate inputs** at workflow boundaries
+5. **Document complex logic** with comments
+
+### Parameter Management
+```bicep
+// ✅ Good: Clear parameter types and defaults
+param apiBaseUrl string = "https://api.prod.company.com"
+param maxRetries number = 3
+param enableDebug boolean = false
+
+// ❌ Bad: Unclear parameter purpose
+param url string
+param count number
+param flag boolean
+```
+
+### Error Handling
+```bicep
+// ✅ Good: Explicit error handling
+node apiCall "http.request" {
+  url: apiUrl
+  continueOnFail: true
+}
+
+node checkResult "flow.if" {
+  condition: "${apiCall.output.statusCode} < 400"
+}
+
+connect apiCall -> checkResult
+connect checkResult.true -> processSuccess
+connect checkResult.false -> handleError
+```
+
+### Security Considerations
+- **Never hardcode secrets** - use `env()` function
+- **Validate external inputs** from webhooks/forms  
+- **Use HTTPS endpoints** for sensitive data
+- **Implement rate limiting** for public triggers
+
+## Extending the Compiler
+
+### Adding Node Types
+```typescript
+// src/generator/nodeTemplates.ts
+export class CustomNodeTemplate implements NodeTemplate {
+  mapParameters(params: Record<string, any>): Record<string, any> {
+    return {
+      customField: params.input,
+      mappedValue: this.transformParameter(params.config)
+    };
+  }
+}
+
+// Register new node type
+NODE_TEMPLATES['custom.newNode'] = new CustomNodeTemplate();
+```
+
+### Custom Validation Rules
+```typescript
+// src/utils/validation.ts
+export class CustomValidator extends Validator {
+  validateCustomRules(workflow: WorkflowDeclaration): ValidationError[] {
+    const errors: ValidationError[] = [];
+    
+    // Custom validation logic
+    if (this.hasSecurityIssues(workflow)) {
+      errors.push({
+        message: "Security vulnerability detected",
+        type: "error"
+      });
+    }
+    
+    return errors;
+  }
+}
+```
+
+## Project Structure
+
+```
+src/
+├── parser/              # Lexical analysis and parsing
+│   ├── lexer.ts        # Tokenization
+│   └── parser.ts       # Recursive descent parser
+├── generator/          # Code generation
+│   ├── generator.ts    # Main generator logic
+│   └── nodeTemplates.ts # Node-specific mappings
+├── types/              # Type definitions
+│   ├── dsl.ts         # AST and DSL types
+│   └── n8n.ts         # n8n workflow interfaces
+├── utils/              # Utilities
+│   └── validation.ts  # Validation logic
+├── compiler.ts         # Main compiler orchestration
+├── cli.ts             # Command line interface  
+└── index.ts           # Library entry point
+
+docs/                   # Documentation
+test/                   # Test workflows
+examples/               # Example DSL files
+```
+
+## Contributing
+
+### Development Setup
+```bash
+git clone <repository>
+cd n8n-dsl-compiler
+npm install
+npm run build
+```
+
+### Running Tests
+```bash
+# Test compilation
+npx ts-node src/cli.ts compile test/simple-workflow.n8n -o test-output.json
+
+# Validate syntax
+npx ts-node src/cli.ts validate test/simple-workflow.n8n
+
+# Generate examples
+npx ts-node src/cli.ts example --type complex
+```
+
+### Contribution Guidelines
+1. **Follow TypeScript best practices**
+2. **Add tests for new features**
+3. **Update documentation** for syntax changes
+4. **Validate generated n8n JSON** works in actual n8n instances
+5. **Handle edge cases gracefully**
+
+## Roadmap
+
+### Short Term
+- [ ] Complete module system implementation
+- [ ] Advanced template expressions
+- [ ] More integration node types
+- [ ] IDE language server support
+
+### Medium Term  
+- [ ] Visual DSL editor
+- [ ] Workflow debugging capabilities
+- [ ] Performance optimizations
+- [ ] Configuration profiles
+
+### Long Term
+- [ ] AI-assisted workflow generation
+- [ ] Version control for workflows
+- [ ] Collaborative editing features
+- [ ] Marketplace for modules
+
+## Support
+
+- **Documentation**: See `docs/` directory
+- **Examples**: Check `examples/` and `test/` directories  
+- **Issues**: Report bugs and feature requests via GitHub
+- **Community**: Join discussions in project forums
+
+---
+
+The N8N DSL Compiler bridges the gap between human-readable automation definitions and executable n8n workflows, enabling teams to build, maintain, and scale their automation infrastructure with confidence and clarity.

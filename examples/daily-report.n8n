@@ -1,0 +1,97 @@
+// Daily Report Workflow
+// Fetches data from API, transforms it, and emails a summary
+
+workflow "daily-report" {
+  // Parameters for customization
+  param timezone string = "Europe/Prague"
+  param recipientEmail string = "[email protected]"
+  param apiToken string = env("API_TOKEN")
+  param reportDate string = now("yyyy-MM-dd")
+  
+  // Variables for computed values
+  var apiUrl = "https://api.acme.com/reports/${reportDate}"
+  var emailSubject = "Daily Report - ${now(timezone, 'MMMM d, yyyy')}"
+  
+  // Trigger: Run daily at 8 AM
+  node trigger "trigger.schedule" {
+    cron: "0 8 * * *"
+    timezone: timezone
+  }
+  
+  // Fetch data from API
+  node fetchData "http.request" {
+    method: "GET"
+    url: apiUrl
+    headers: {
+      "Authorization": "Bearer ${apiToken}"
+      "Content-Type": "application/json" 
+    }
+    timeout: 30000
+    continueOnFail: true
+  }
+  
+  // Check if API call was successful
+  node checkSuccess "flow.if" {
+    condition: "${fetchData.output.statusCode} >= 200 && ${fetchData.output.statusCode} < 300"
+  }
+  
+  // Transform the data into report format
+  node transformData "data.transform" {
+    code: file("./scripts/transform-report.js")
+  }
+  
+  // Generate HTML email body
+  node formatEmail "data.set" {
+    assignments: {
+      htmlBody: `
+        <h2>Daily Report - ${reportDate}</h2>
+        <h3>Summary</h3>
+        <ul>
+          <li>Total Records: {{ $json.data.length }}</li>
+          <li>Success Rate: {{ ($json.data.filter(d => d.status === 'success').length / $json.data.length * 100).toFixed(1) }}%</li>
+          <li>Generated: {{ $now.format('yyyy-MM-dd HH:mm:ss') }}</li>
+        </ul>
+        <h3>Details</h3>
+        <table border="1" style="border-collapse: collapse; width: 100%;">
+          <tr><th>ID</th><th>Status</th><th>Value</th></tr>
+          {{#each $json.data}}
+          <tr><td>{{id}}</td><td>{{status}}</td><td>{{value}}</td></tr>
+          {{/each}}
+        </table>
+      `
+      textBody: "Daily report attached. Total records: {{ $json.data.length }}"
+    }
+  }
+  
+  // Send success email
+  node sendReport "integration.email" {
+    to: recipientEmail
+    subject: emailSubject
+    body: "${formatEmail.output.htmlBody}"
+    bodyType: "html"
+  }
+  
+  // Handle API failure - send error notification
+  node sendErrorAlert "integration.email" {
+    to: recipientEmail
+    subject: "⚠️ Daily Report Failed - ${reportDate}"
+    body: `
+      The daily report failed to generate due to an API error.
+      
+      Error Details:
+      Status Code: ${fetchData.output.statusCode}
+      Error Message: ${fetchData.output.error}
+      
+      Please check the API service and retry manually if needed.
+    `
+    bodyType: "text"
+  }
+  
+  // Connect the nodes
+  connect trigger -> fetchData
+  connect fetchData -> checkSuccess
+  connect checkSuccess.true -> transformData
+  connect transformData -> formatEmail
+  connect formatEmail -> sendReport
+  connect checkSuccess.false -> sendErrorAlert
+}

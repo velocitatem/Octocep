@@ -1,0 +1,180 @@
+// Lead Processing Workflow
+// Processes incoming leads from webhook, validates, enriches, and routes them
+
+workflow "lead-processor" {
+  // Configuration parameters
+  param salesEmail string = "[email protected]"
+  param crmApiUrl string = "https://api.crm.com/v1"
+  param crmApiKey string = env("CRM_API_KEY")
+  param enrichmentApiKey string = env("ENRICHMENT_API_KEY")
+  param minLeadScore number = 50
+  
+  // Webhook trigger for incoming leads
+  node webhook "trigger.webhook" {
+    path: "/leads/process"
+    method: "POST"
+    authentication: "headerAuth"
+    authHeaderName: "X-API-Key"
+  }
+  
+  // Validate required fields
+  node validateLead "flow.if" {
+    condition: "${webhook.output.email} != null && ${webhook.output.company} != null"
+  }
+  
+  // Enrich lead data with external service
+  module enrichLead = ./modules/leadEnrichment.n8n {
+    email: "${webhook.output.email}"
+    company: "${webhook.output.company}"
+    apiKey: enrichmentApiKey
+  }
+  
+  // Calculate lead score based on enriched data
+  node calculateScore "data.transform" {
+    code: `
+      const lead = items[0].json;
+      let score = 0;
+      
+      // Company size scoring
+      if (lead.enrichedData.employeeCount > 1000) score += 30;
+      else if (lead.enrichedData.employeeCount > 100) score += 20;
+      else if (lead.enrichedData.employeeCount > 10) score += 10;
+      
+      // Industry scoring
+      const highValueIndustries = ['technology', 'finance', 'healthcare'];
+      if (highValueIndustries.includes(lead.enrichedData.industry?.toLowerCase())) {
+        score += 25;
+      }
+      
+      // Job title scoring
+      const seniorTitles = ['ceo', 'cto', 'vp', 'director', 'manager'];
+      const title = lead.jobTitle?.toLowerCase() || '';
+      if (seniorTitles.some(t => title.includes(t))) {
+        score += 20;
+      }
+      
+      // Revenue scoring
+      if (lead.enrichedData.revenue > 10000000) score += 25;
+      else if (lead.enrichedData.revenue > 1000000) score += 15;
+      
+      return [{
+        json: {
+          ...lead,
+          leadScore: score,
+          priority: score >= ${minLeadScore} ? 'high' : 'low'
+        }
+      }];
+    `
+  }
+  
+  // Route based on lead score
+  node routeLead "flow.switch" {
+    dataProperty: "priority"
+    rules: [
+      { value: "high", output: 0 },
+      { value: "low", output: 1 }
+    ]
+  }
+  
+  // High-priority lead processing
+  node processHighPriorityLead "data.set" {
+    assignments: {
+      leadData: {
+        email: "${webhook.output.email}"
+        company: "${webhook.output.company}"
+        jobTitle: "${webhook.output.jobTitle}"
+        phone: "${webhook.output.phone}"
+        leadScore: "${calculateScore.output.leadScore}"
+        enrichedData: "${enrichLead.output.enrichedData}"
+        priority: "high"
+        assignedTo: salesEmail
+        createdAt: "${now()}"
+      }
+    }
+  }
+  
+  // Add to CRM
+  node addToCrm "http.request" {
+    method: "POST"
+    url: "${crmApiUrl}/leads"
+    headers: {
+      "Authorization": "Bearer ${crmApiKey}"
+      "Content-Type": "application/json"
+    }
+    body: "${processHighPriorityLead.output.leadData}"
+  }
+  
+  // Send immediate notification for high-priority leads
+  node notifySales "integration.email" {
+    to: salesEmail
+    subject: "🔥 High-Priority Lead: ${webhook.output.company}"
+    body: `
+      New high-priority lead received!
+      
+      Company: ${webhook.output.company}
+      Contact: ${webhook.output.email}
+      Job Title: ${webhook.output.jobTitle}
+      Lead Score: ${calculateScore.output.leadScore}/100
+      
+      Enriched Data:
+      - Industry: ${enrichLead.output.enrichedData.industry}
+      - Employee Count: ${enrichLead.output.enrichedData.employeeCount}
+      - Revenue: $${enrichLead.output.enrichedData.revenue?.toLocaleString()}
+      
+      This lead has been automatically added to the CRM.
+      Please follow up within 24 hours.
+    `
+    bodyType: "text"
+  }
+  
+  // Low-priority lead processing - add to nurture campaign
+  node processLowPriorityLead "data.set" {
+    assignments: {
+      leadData: {
+        email: "${webhook.output.email}"
+        company: "${webhook.output.company}"
+        leadScore: "${calculateScore.output.leadScore}"
+        priority: "low"
+        status: "nurture"
+        createdAt: "${now()}"
+      }
+    }
+  }
+  
+  // Add to nurture list
+  node addToNurture "http.request" {
+    method: "POST"
+    url: "${crmApiUrl}/nurture-campaigns"
+    headers: {
+      "Authorization": "Bearer ${crmApiKey}"
+      "Content-Type": "application/json"
+    }
+    body: "${processLowPriorityLead.output.leadData}"
+  }
+  
+  // Send validation error response
+  node sendValidationError "data.set" {
+    assignments: {
+      error: "Invalid lead data. Required fields: email, company"
+      statusCode: 400
+    }
+  }
+  
+  // Connect the workflow
+  connect webhook -> validateLead
+  connect validateLead.true -> enrichLead
+  connect enrichLead -> calculateScore
+  connect calculateScore -> routeLead
+  
+  // High-priority path
+  connect routeLead.output0 -> processHighPriorityLead
+  connect processHighPriorityLead -> addToCrm
+  connect addToCrm -> notifySales
+  
+  // Low-priority path  
+  connect routeLead.output1 -> processLowPriorityLead
+  connect processLowPriorityLead -> addToNurture
+  
+  // Error path
+  connect validateLead.false -> sendValidationError
+}

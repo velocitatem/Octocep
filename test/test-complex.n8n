@@ -1,0 +1,45 @@
+workflow "complex-example" {
+  param apiUrl string = "https://api.example.com/data"
+  param emailTo string = "user@example.com"
+  param threshold number = 100
+
+  var emailSubject = "Report: ${now()}"
+
+  node trigger "trigger.schedule" {
+    cron: "0 9 * * *"
+  }
+
+  node fetchData "http.request" {
+    method: "GET"
+    url: apiUrl
+    headers: {
+      "Content-Type": "application/json"
+    }
+  }
+
+  node checkData "flow.if" {
+    condition: "${fetchData.output.count} > ${threshold}"
+  }
+
+  node processData "data.transform" {
+    code: "return items.map(item => ({ ...item.json, processed: true }));"
+  }
+
+  node sendAlert "integration.email" {
+    to: emailTo
+    subject: emailSubject
+    body: "Alert: Data count exceeded threshold"
+  }
+
+  node sendReport "integration.email" {
+    to: emailTo
+    subject: emailSubject
+    body: "Regular report with processed data"
+  }
+
+  connect trigger -> fetchData
+  connect fetchData -> checkData
+  connect checkData.true -> sendAlert
+  connect checkData.false -> processData
+  connect processData -> sendReport
+}
