@@ -1,0 +1,447 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "N8N DSL",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#workflow"
+    },
+    {
+      "include": "#parameters"
+    },
+    {
+      "include": "#variables"
+    },
+    {
+      "include": "#nodes"
+    },
+    {
+      "include": "#modules"
+    },
+    {
+      "include": "#connections"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#booleans"
+    },
+    {
+      "include": "#expressions"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.n8n-dsl",
+          "begin": "//",
+          "end": "$"
+        },
+        {
+          "name": "comment.block.n8n-dsl",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "captures": {
+            "0": {
+              "name": "punctuation.definition.comment.n8n-dsl"
+            }
+          }
+        }
+      ]
+    },
+    "workflow": {
+      "patterns": [
+        {
+          "name": "meta.workflow.n8n-dsl",
+          "begin": "\\b(workflow)\\s+(\"[^\"]*\")\\s*\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.workflow.n8n-dsl"
+            },
+            "2": {
+              "name": "string.quoted.double.workflow-name.n8n-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#parameters"
+            },
+            {
+              "include": "#variables"
+            },
+            {
+              "include": "#nodes"
+            },
+            {
+              "include": "#modules"
+            },
+            {
+              "include": "#connections"
+            }
+          ]
+        }
+      ]
+    },
+    "parameters": {
+      "patterns": [
+        {
+          "name": "meta.parameter.n8n-dsl",
+          "match": "\\b(param)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+(string|number|boolean|array|object)\\s*(=\\s*([^\\n]+))?",
+          "captures": {
+            "1": {
+              "name": "keyword.control.param.n8n-dsl"
+            },
+            "2": {
+              "name": "variable.parameter.name.n8n-dsl"
+            },
+            "3": {
+              "name": "storage.type.n8n-dsl"
+            },
+            "4": {
+              "name": "meta.parameter.default.n8n-dsl"
+            }
+          }
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "meta.variable.n8n-dsl",
+          "match": "\\b(var)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.var.n8n-dsl"
+            },
+            "2": {
+              "name": "variable.other.name.n8n-dsl"
+            },
+            "3": {
+              "name": "keyword.operator.assignment.n8n-dsl"
+            }
+          }
+        }
+      ]
+    },
+    "nodes": {
+      "patterns": [
+        {
+          "name": "meta.node.n8n-dsl",
+          "begin": "\\b(node)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+(\"[^\"]*\")\\s*\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.node.n8n-dsl"
+            },
+            "2": {
+              "name": "entity.name.function.node.n8n-dsl"
+            },
+            "3": {
+              "name": "string.quoted.double.node-type.n8n-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#node-properties"
+            },
+            {
+              "include": "#comments"
+            }
+          ]
+        }
+      ]
+    },
+    "modules": {
+      "patterns": [
+        {
+          "name": "meta.module.n8n-dsl",
+          "begin": "\\b(module)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)\\s*([^\\s{]+)\\s*\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.module.n8n-dsl"
+            },
+            "2": {
+              "name": "entity.name.function.module.n8n-dsl"
+            },
+            "3": {
+              "name": "keyword.operator.assignment.n8n-dsl"
+            },
+            "4": {
+              "name": "string.unquoted.module-path.n8n-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#node-properties"
+            },
+            {
+              "include": "#comments"
+            }
+          ]
+        }
+      ]
+    },
+    "connections": {
+      "patterns": [
+        {
+          "name": "meta.connection.n8n-dsl",
+          "match": "\\b(connect)\\s+([a-zA-Z_][a-zA-Z0-9_.]*)\\s*(->)\\s*([a-zA-Z_][a-zA-Z0-9_.]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.connect.n8n-dsl"
+            },
+            "2": {
+              "name": "variable.other.source.n8n-dsl"
+            },
+            "3": {
+              "name": "keyword.operator.arrow.n8n-dsl"
+            },
+            "4": {
+              "name": "variable.other.target.n8n-dsl"
+            }
+          }
+        }
+      ]
+    },
+    "node-properties": {
+      "patterns": [
+        {
+          "name": "meta.property.n8n-dsl",
+          "begin": "([a-zA-Z_][a-zA-Z0-9_]*)\\s*:",
+          "end": "(?=\\n|,|\\})",
+          "beginCaptures": {
+            "1": {
+              "name": "variable.other.property.n8n-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#property-values"
+            }
+          ]
+        }
+      ]
+    },
+    "property-values": {
+      "patterns": [
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#booleans"
+        },
+        {
+          "include": "#objects"
+        },
+        {
+          "include": "#arrays"
+        },
+        {
+          "include": "#expressions"
+        },
+        {
+          "include": "#function-calls"
+        }
+      ]
+    },
+    "objects": {
+      "patterns": [
+        {
+          "name": "meta.object.n8n-dsl",
+          "begin": "\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.dictionary.begin.n8n-dsl"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.dictionary.end.n8n-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#object-properties"
+            },
+            {
+              "include": "#comments"
+            }
+          ]
+        }
+      ]
+    },
+    "object-properties": {
+      "patterns": [
+        {
+          "name": "meta.object-property.n8n-dsl",
+          "match": "(\"[^\"]*\"|[a-zA-Z_][a-zA-Z0-9_]*)\\s*:",
+          "captures": {
+            "1": {
+              "name": "support.type.property-name.n8n-dsl"
+            }
+          }
+        }
+      ]
+    },
+    "arrays": {
+      "patterns": [
+        {
+          "name": "meta.array.n8n-dsl",
+          "begin": "\\[",
+          "end": "\\]",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.array.begin.n8n-dsl"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.array.end.n8n-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#property-values"
+            },
+            {
+              "include": "#comments"
+            }
+          ]
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.n8n-dsl",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.n8n-dsl",
+              "match": "\\\\."
+            },
+            {
+              "include": "#string-interpolation"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.n8n-dsl",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.n8n-dsl",
+              "match": "\\\\."
+            },
+            {
+              "include": "#string-interpolation"
+            }
+          ]
+        },
+        {
+          "name": "string.template.n8n-dsl",
+          "begin": "`",
+          "end": "`",
+          "patterns": [
+            {
+              "name": "constant.character.escape.n8n-dsl",
+              "match": "\\\\."
+            },
+            {
+              "include": "#string-interpolation"
+            }
+          ]
+        }
+      ]
+    },
+    "string-interpolation": {
+      "patterns": [
+        {
+          "name": "meta.embedded.expression.n8n-dsl",
+          "begin": "\\$\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.template-expression.begin.n8n-dsl"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.template-expression.end.n8n-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#expressions"
+            }
+          ]
+        }
+      ]
+    },
+    "expressions": {
+      "patterns": [
+        {
+          "name": "meta.expression.n8n-dsl",
+          "match": "\\$\\{[^}]*\\}",
+          "captures": {
+            "0": {
+              "name": "meta.embedded.expression.n8n-dsl"
+            }
+          }
+        },
+        {
+          "name": "variable.other.object.n8n-dsl",
+          "match": "\\$[a-zA-Z_][a-zA-Z0-9_]*"
+        }
+      ]
+    },
+    "function-calls": {
+      "patterns": [
+        {
+          "name": "meta.function-call.n8n-dsl",
+          "match": "\\b(now|file|env|json)\\s*\\(",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.builtin.n8n-dsl"
+            }
+          }
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.n8n-dsl",
+          "match": "\\b\\d+(?:\\.\\d+)?\\b"
+        }
+      ]
+    },
+    "booleans": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.n8n-dsl",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.n8n-dsl"
+}

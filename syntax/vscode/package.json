@@ -1,0 +1,170 @@
+{
+  "name": "n8n-dsl-syntax",
+  "displayName": "N8N DSL Language Support",
+  "description": "Syntax highlighting and language support for N8N DSL files",
+  "version": "1.0.0",
+  "publisher": "tricep",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Formatters"
+  ],
+  "keywords": [
+    "n8n",
+    "dsl",
+    "workflow",
+    "automation",
+    "syntax",
+    "highlighting"
+  ],
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tricep/n8n-dsl-syntax"
+  },
+  "license": "MIT",
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "n8n-dsl",
+        "aliases": [
+          "N8N DSL",
+          "n8n-dsl"
+        ],
+        "extensions": [
+          ".n8n"
+        ],
+        "firstLine": "^\\s*//.*N8N|^\\s*workflow\\s+",
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "n8n-dsl",
+        "scopeName": "source.n8n-dsl",
+        "path": "./syntaxes/n8n-dsl.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "n8n-dsl",
+        "path": "./snippets/n8n-dsl.json"
+      }
+    ],
+    "themes": [
+      {
+        "label": "N8N DSL Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/n8n-dsl-dark.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "N8N DSL",
+      "properties": {
+        "n8n-dsl.validation.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable syntax validation for N8N DSL files"
+        },
+        "n8n-dsl.formatting.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic formatting for N8N DSL files"
+        },
+        "n8n-dsl.completion.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable auto-completion for N8N DSL files"
+        },
+        "n8n-dsl.indentation.size": {
+          "type": "number",
+          "default": 2,
+          "description": "Number of spaces for indentation"
+        },
+        "n8n-dsl.maxLineLength": {
+          "type": "number",
+          "default": 120,
+          "description": "Maximum line length for formatting"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "n8n-dsl.compile",
+        "title": "Compile N8N DSL File",
+        "category": "N8N DSL"
+      },
+      {
+        "command": "n8n-dsl.validate",
+        "title": "Validate N8N DSL File",
+        "category": "N8N DSL"
+      },
+      {
+        "command": "n8n-dsl.format",
+        "title": "Format N8N DSL File",
+        "category": "N8N DSL"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .n8n",
+          "command": "n8n-dsl.compile",
+          "group": "n8n-dsl"
+        },
+        {
+          "when": "resourceExtname == .n8n",
+          "command": "n8n-dsl.validate",
+          "group": "n8n-dsl"
+        }
+      ],
+      "editor/context": [
+        {
+          "when": "resourceExtname == .n8n",
+          "command": "n8n-dsl.format",
+          "group": "1_modification"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "n8n-dsl.compile",
+        "key": "ctrl+shift+c",
+        "mac": "cmd+shift+c",
+        "when": "resourceExtname == .n8n"
+      },
+      {
+        "command": "n8n-dsl.validate",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "resourceExtname == .n8n"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onLanguage:n8n-dsl"
+  ],
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "16.x",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "eslint": "^8.28.0",
+    "typescript": "^4.9.4",
+    "vsce": "^2.15.0"
+  }
+}

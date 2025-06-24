@@ -1,0 +1,257 @@
+# N8N DSL Universal Syntax Definition
+# This file defines the core syntax elements for the N8N DSL language
+# It can be used to generate syntax highlighting for various editors
+
+language:
+  name: "N8N DSL"
+  extensions: [".n8n"]
+  scope: "source.n8n-dsl"
+  mime_types: ["text/x-n8n-dsl"]
+  first_line_match: "^\\s*//.*N8N|^\\s*workflow\\s+"
+
+# Core language elements
+syntax:
+  # Comments
+  comments:
+    line:
+      pattern: "//.*$"
+      scope: "comment.line.double-slash"
+    block:
+      begin: "/\\*"
+      end: "\\*/"
+      scope: "comment.block"
+
+  # Keywords
+  keywords:
+    control:
+      - "workflow"
+      - "param" 
+      - "var"
+      - "node"
+      - "module"
+      - "connect"
+      - "output"
+    scope: "keyword.control"
+
+  # Data types
+  types:
+    basic:
+      - "string"
+      - "number"
+      - "boolean"
+      - "array"
+      - "object"
+    scope: "storage.type"
+
+  # Built-in functions
+  functions:
+    builtin:
+      - "now"
+      - "file"
+      - "env"
+      - "json"
+    scope: "support.function.builtin"
+
+  # String literals
+  strings:
+    double_quoted:
+      begin: "\""
+      end: "\""
+      scope: "string.quoted.double"
+      escapes: "\\\\."
+    single_quoted:
+      begin: "'"
+      end: "'"
+      scope: "string.quoted.single"
+      escapes: "\\\\."
+    template:
+      begin: "`"
+      end: "`"
+      scope: "string.template"
+      escapes: "\\\\."
+
+  # String interpolation
+  interpolation:
+    pattern: "\\$\\{[^}]*\\}"
+    scope: "meta.embedded.expression"
+    inner_scope: "source.js.embedded"
+
+  # Numbers
+  numbers:
+    integer:
+      pattern: "\\b\\d+\\b"
+      scope: "constant.numeric.integer"
+    float:
+      pattern: "\\b\\d+\\.\\d+\\b"
+      scope: "constant.numeric.float"
+
+  # Booleans
+  booleans:
+    pattern: "\\b(true|false)\\b"
+    scope: "constant.language.boolean"
+
+  # Node types (common ones)
+  node_types:
+    patterns:
+      - "trigger\\.(manual|schedule|webhook|form)"
+      - "http\\.request"
+      - "flow\\.(if|switch|splitInBatches)"
+      - "data\\.(set|transform|aggregate)"
+      - "integration\\.(email|slack|sheets|calendar)"
+    scope: "string.quoted.double.node-type"
+
+  # Operators
+  operators:
+    assignment: "="
+    arrow: "->"
+    comparison: "(>=|<=|>|<|==|!=)"
+    logical: "(&&|\\|\\|)"
+    scope: "keyword.operator"
+
+  # Punctuation
+  punctuation:
+    braces:
+      open: "\\{"
+      close: "\\}"
+      scope: "punctuation.definition.dictionary"
+    brackets:
+      open: "\\["
+      close: "\\]"
+      scope: "punctuation.definition.array"
+    parentheses:
+      open: "\\("
+      close: "\\)"
+      scope: "punctuation.definition.parameters"
+
+# Complex patterns
+patterns:
+  # Workflow declaration
+  workflow:
+    pattern: "\\b(workflow)\\s+(\"[^\"]*\")\\s*\\{"
+    captures:
+      1: "keyword.control.workflow"
+      2: "string.quoted.double.workflow-name"
+
+  # Parameter declaration
+  parameter:
+    pattern: "\\b(param)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+(string|number|boolean|array|object)(?:\\s*(=)\\s*([^\\n]+))?"
+    captures:
+      1: "keyword.control.param"
+      2: "variable.parameter.name"
+      3: "storage.type"
+      4: "keyword.operator.assignment"
+      5: "meta.parameter.default"
+
+  # Variable declaration
+  variable:
+    pattern: "\\b(var)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)"
+    captures:
+      1: "keyword.control.var"
+      2: "variable.other.name"
+      3: "keyword.operator.assignment"
+
+  # Node declaration
+  node:
+    pattern: "\\b(node)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+(\"[^\"]*\")\\s*\\{"
+    captures:
+      1: "keyword.control.node"
+      2: "entity.name.function.node"
+      3: "string.quoted.double.node-type"
+
+  # Module declaration
+  module:
+    pattern: "\\b(module)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)\\s*([^\\s{]+)\\s*\\{"
+    captures:
+      1: "keyword.control.module"
+      2: "entity.name.function.module"
+      3: "keyword.operator.assignment"
+      4: "string.unquoted.module-path"
+
+  # Connection
+  connection:
+    pattern: "\\b(connect)\\s+([a-zA-Z_][a-zA-Z0-9_.]*)\\s*(->)\\s*([a-zA-Z_][a-zA-Z0-9_.]*)"
+    captures:
+      1: "keyword.control.connect"
+      2: "variable.other.source"
+      3: "keyword.operator.arrow"
+      4: "variable.other.target"
+
+  # Property assignment
+  property:
+    pattern: "([a-zA-Z_][a-zA-Z0-9_]*)\\s*:"
+    captures:
+      1: "variable.other.property"
+
+  # Function calls
+  function_call:
+    pattern: "\\b(now|file|env|json)\\s*\\("
+    captures:
+      1: "entity.name.function.builtin"
+
+# Color scheme recommendations
+colors:
+  keywords: "#C678DD"          # Purple
+  types: "#E06C75"             # Red
+  strings: "#98C379"           # Green
+  numbers: "#D19A66"           # Orange
+  comments: "#5C6370"          # Gray
+  functions: "#61AFEF"         # Blue
+  operators: "#56B6C2"         # Cyan
+  variables: "#E5C07B"         # Yellow
+  node_types: "#98C379"        # Green
+  interpolation: "#D19A66"     # Orange
+
+# Indentation rules
+indentation:
+  increase_patterns:
+    - "\\{\\s*$"
+    - "workflow\\s+\"[^\"]*\"\\s*\\{\\s*$"
+    - "node\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s+\"[^\"]*\"\\s*\\{\\s*$"
+  decrease_patterns:
+    - "^\\s*\\}\\s*$"
+
+# Auto-completion suggestions
+completions:
+  keywords:
+    - "workflow"
+    - "param"
+    - "var"
+    - "node"
+    - "module"
+    - "connect"
+  
+  types:
+    - "string"
+    - "number"
+    - "boolean"
+    - "array"
+    - "object"
+  
+  node_types:
+    - "trigger.manual"
+    - "trigger.schedule"
+    - "trigger.webhook"
+    - "http.request"
+    - "flow.if"
+    - "flow.switch"
+    - "data.set"
+    - "data.transform"
+    - "integration.email"
+    - "integration.slack"
+  
+  functions:
+    - "now()"
+    - "file()"
+    - "env()"
+    - "json()"
+
+# Folding patterns
+folding:
+  - begin: "\\{"
+    end: "\\}"
+  - begin: "workflow\\s+\"[^\"]*\"\\s*\\{"
+    end: "\\}"
+  - begin: "node\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s+\"[^\"]*\"\\s*\\{"
+    end: "\\}"
+  - begin: "/\\*"
+    end: "\\*/"

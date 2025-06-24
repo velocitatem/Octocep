@@ -1,0 +1,415 @@
+{
+  "Basic Workflow": {
+    "prefix": "workflow",
+    "body": [
+      "// ${1:Workflow Description}",
+      "",
+      "workflow \"${2:workflow-name}\" {",
+      "  // Parameters",
+      "  param ${3:paramName} string = \"${4:defaultValue}\"",
+      "  ",
+      "  // Variables",
+      "  var ${5:varName} = \"${6:value}\"",
+      "  ",
+      "  // Trigger",
+      "  node ${7:trigger} \"${8:trigger.manual}\" {",
+      "    $0",
+      "  }",
+      "  ",
+      "  // Connections",
+      "  connect ${7:trigger} -> ${9:nextNode}",
+      "}"
+    ],
+    "description": "Create a basic workflow structure"
+  },
+  
+  "Parameter Declaration": {
+    "prefix": "param",
+    "body": [
+      "param ${1:name} ${2|string,number,boolean,array,object|} = ${3:defaultValue}"
+    ],
+    "description": "Create a parameter declaration"
+  },
+  
+  "Variable Declaration": {
+    "prefix": "var",
+    "body": [
+      "var ${1:name} = ${2:value}"
+    ],
+    "description": "Create a variable declaration"
+  },
+  
+  "Manual Trigger Node": {
+    "prefix": "trigger-manual",
+    "body": [
+      "node ${1:trigger} \"trigger.manual\" {",
+      "  $0",
+      "}"
+    ],
+    "description": "Create a manual trigger node"
+  },
+  
+  "Schedule Trigger Node": {
+    "prefix": "trigger-schedule",
+    "body": [
+      "node ${1:trigger} \"trigger.schedule\" {",
+      "  cron: \"${2:0 8 * * *}\"",
+      "  timezone: \"${3:UTC}\"",
+      "  $0",
+      "}"
+    ],
+    "description": "Create a schedule trigger node"
+  },
+  
+  "Webhook Trigger Node": {
+    "prefix": "trigger-webhook",
+    "body": [
+      "node ${1:webhook} \"trigger.webhook\" {",
+      "  path: \"${2:/webhook/path}\"",
+      "  method: \"${3|GET,POST,PUT,DELETE|}\"",
+      "  authentication: \"${4|none,basicAuth,headerAuth|}\"",
+      "  $0",
+      "}"
+    ],
+    "description": "Create a webhook trigger node"
+  },
+  
+  "HTTP Request Node": {
+    "prefix": "http-request",
+    "body": [
+      "node ${1:httpRequest} \"http.request\" {",
+      "  method: \"${2|GET,POST,PUT,DELETE,PATCH|}\"",
+      "  url: \"${3:https://api.example.com/endpoint}\"",
+      "  headers: {",
+      "    \"Content-Type\": \"application/json\"",
+      "    \"Authorization\": \"Bearer \\${${4:apiToken}}\"",
+      "  }",
+      "  ${5:body: {",
+      "    // Request body",
+      "  }}",
+      "  timeout: ${6:30000}",
+      "  continueOnFail: ${7:true}",
+      "  $0",
+      "}"
+    ],
+    "description": "Create an HTTP request node"
+  },
+  
+  "If Node (Conditional)": {
+    "prefix": "if-node",
+    "body": [
+      "node ${1:checkCondition} \"flow.if\" {",
+      "  condition: \"${2:\\${data.value} > 10}\"",
+      "  $0",
+      "}"
+    ],
+    "description": "Create an if/conditional node"
+  },
+  
+  "Switch Node": {
+    "prefix": "switch-node",
+    "body": [
+      "node ${1:routeData} \"flow.switch\" {",
+      "  dataProperty: \"${2:status}\"",
+      "  rules: [",
+      "    { value: \"${3:success}\", output: 0 },",
+      "    { value: \"${4:error}\", output: 1 }",
+      "  ]",
+      "  $0",
+      "}"
+    ],
+    "description": "Create a switch node for routing"
+  },
+  
+  "Transform/Code Node": {
+    "prefix": "transform-node",
+    "body": [
+      "node ${1:transform} \"data.transform\" {",
+      "  code: `",
+      "    ${2:// JavaScript code here}",
+      "    return items.map(item => ({",
+      "      ...item.json,",
+      "      ${3:processed: true,}",
+      "      ${4:timestamp: new Date().toISOString()}",
+      "    }));",
+      "  `",
+      "  $0",
+      "}"
+    ],
+    "description": "Create a data transformation node"
+  },
+  
+  "Set Data Node": {
+    "prefix": "set-data",
+    "body": [
+      "node ${1:setData} \"data.set\" {",
+      "  assignments: {",
+      "    ${2:fieldName}: \"${3:value}\"",
+      "    ${4:anotherField}: \\${${5:variable}}",
+      "  }",
+      "  $0",
+      "}"
+    ],
+    "description": "Create a set data node"
+  },
+  
+  "Email Node": {
+    "prefix": "email-node",
+    "body": [
+      "node ${1:sendEmail} \"integration.email\" {",
+      "  to: \"${2:recipient@example.com}\"",
+      "  subject: \"${3:Email Subject}\"",
+      "  body: `${4:Email body content}",
+      "  ",
+      "  Generated at: \\${now()}",
+      "  `",
+      "  bodyType: \"${5|text,html|}\"",
+      "  $0",
+      "}"
+    ],
+    "description": "Create an email node"
+  },
+  
+  "Module Declaration": {
+    "prefix": "module",
+    "body": [
+      "module ${1:moduleName} = ${2:./modules/module.n8n} {",
+      "  ${3:param1}: \"${4:value1}\"",
+      "  ${5:param2}: \\${${6:variable}}",
+      "  $0",
+      "}"
+    ],
+    "description": "Create a module declaration"
+  },
+  
+  "Connection": {
+    "prefix": "connect",
+    "body": [
+      "connect ${1:sourceNode}${2:.output} -> ${3:targetNode}${4:.input}"
+    ],
+    "description": "Create a node connection"
+  },
+  
+  "Complex HTTP with Error Handling": {
+    "prefix": "http-with-error",
+    "body": [
+      "// Fetch data with error handling",
+      "node ${1:fetchData} \"http.request\" {",
+      "  method: \"${2|GET,POST|}\"",
+      "  url: \"${3:https://api.example.com/data}\"",
+      "  headers: {",
+      "    \"Authorization\": \"Bearer \\${${4:apiToken}}\"",
+      "  }",
+      "  continueOnFail: true",
+      "}",
+      "",
+      "// Check if request was successful",
+      "node ${5:checkSuccess} \"flow.if\" {",
+      "  condition: \"\\${${1:fetchData}.output.statusCode} >= 200 && \\${${1:fetchData}.output.statusCode} < 300\"",
+      "}",
+      "",
+      "// Process successful response",
+      "node ${6:processData} \"data.transform\" {",
+      "  code: `",
+      "    return items.map(item => ({",
+      "      ...item.json,",
+      "      processedAt: new Date().toISOString()",
+      "    }));",
+      "  `",
+      "}",
+      "",
+      "// Handle errors",
+      "node ${7:handleError} \"integration.email\" {",
+      "  to: \"${8:admin@example.com}\"",
+      "  subject: \"API Error Alert\"",
+      "  body: `API request failed:",
+      "  Status: \\${${1:fetchData}.output.statusCode}",
+      "  Error: \\${${1:fetchData}.output.error}",
+      "  `",
+      "}",
+      "",
+      "// Connections",
+      "connect ${1:fetchData} -> ${5:checkSuccess}",
+      "connect ${5:checkSuccess}.true -> ${6:processData}",
+      "connect ${5:checkSuccess}.false -> ${7:handleError}",
+      "$0"
+    ],
+    "description": "HTTP request with comprehensive error handling"
+  },
+  
+  "Daily Report Workflow": {
+    "prefix": "daily-report",
+    "body": [
+      "// Daily Report Workflow",
+      "workflow \"${1:daily-report}\" {",
+      "  // Parameters",
+      "  param recipientEmail string = \"${2:report@company.com}\"",
+      "  param apiEndpoint string = \"${3:https://api.company.com/reports}\"",
+      "  param apiToken string = env(\"${4:API_TOKEN}\") ",
+      "  ",
+      "  // Variables",
+      "  var reportDate = now(\"yyyy-MM-dd\")",
+      "  var emailSubject = \"Daily Report - \\${now('MMMM d, yyyy')}\"",
+      "  ",
+      "  // Daily trigger at 8 AM",
+      "  node trigger \"trigger.schedule\" {",
+      "    cron: \"0 8 * * *\"",
+      "  }",
+      "  ",
+      "  // Fetch report data",
+      "  node fetchData \"http.request\" {",
+      "    method: \"GET\"",
+      "    url: \"\\${apiEndpoint}?date=\\${reportDate}\"",
+      "    headers: {",
+      "      \"Authorization\": \"Bearer \\${apiToken}\"",
+      "    }",
+      "    continueOnFail: true",
+      "  }",
+      "  ",
+      "  // Check if successful",
+      "  node checkSuccess \"flow.if\" {",
+      "    condition: \"\\${fetchData.output.statusCode} >= 200 && \\${fetchData.output.statusCode} < 300\"",
+      "  }",
+      "  ",
+      "  // Format report",
+      "  node formatReport \"data.transform\" {",
+      "    code: `",
+      "      const data = items[0].json;",
+      "      return [{",
+      "        json: {",
+      "          reportHtml: \\`<h2>Daily Report</h2>",
+      "                       <p>Total: \\${data.total}</p>",
+      "                       <p>Success: \\${data.success}</p>\\`",
+      "        }",
+      "      }];",
+      "    `",
+      "  }",
+      "  ",
+      "  // Send report email",
+      "  node sendReport \"integration.email\" {",
+      "    to: recipientEmail",
+      "    subject: emailSubject",
+      "    body: \"\\${formatReport.output.reportHtml}\"",
+      "    bodyType: \"html\"",
+      "  }",
+      "  ",
+      "  // Send error notification",
+      "  node sendError \"integration.email\" {",
+      "    to: recipientEmail",
+      "    subject: \"⚠️ Report Generation Failed\"",
+      "    body: \"Report generation failed. Please check the system.\"",
+      "  }",
+      "  ",
+      "  // Connections",
+      "  connect trigger -> fetchData",
+      "  connect fetchData -> checkSuccess",
+      "  connect checkSuccess.true -> formatReport",
+      "  connect formatReport -> sendReport",
+      "  connect checkSuccess.false -> sendError",
+      "}"
+    ],
+    "description": "Complete daily report workflow template"
+  },
+  
+  "Webhook Processing": {
+    "prefix": "webhook-processor",
+    "body": [
+      "// Webhook Processing Workflow",
+      "workflow \"${1:webhook-processor}\" {",
+      "  // Webhook trigger",
+      "  node webhook \"trigger.webhook\" {",
+      "    path: \"/${2:api/process}\"",
+      "    method: \"POST\"",
+      "    authentication: \"headerAuth\"",
+      "    authHeaderName: \"X-API-Key\"",
+      "  }",
+      "  ",
+      "  // Validate incoming data",
+      "  node validate \"flow.if\" {",
+      "    condition: \"\\${webhook.output.email} != null && \\${webhook.output.name} != null\"",
+      "  }",
+      "  ",
+      "  // Process valid data",
+      "  node processData \"data.transform\" {",
+      "    code: `",
+      "      const data = items[0].json;",
+      "      return [{",
+      "        json: {",
+      "          ...data,",
+      "          processedAt: new Date().toISOString(),",
+      "          id: Math.random().toString(36).substr(2, 9)",
+      "        }",
+      "      }];",
+      "    `",
+      "  }",
+      "  ",
+      "  // Save to database/API",
+      "  node saveData \"http.request\" {",
+      "    method: \"POST\"",
+      "    url: \"${3:https://api.company.com/records}\"",
+      "    headers: {",
+      "      \"Content-Type\": \"application/json\"",
+      "    }",
+      "    body: \"\\${processData.output}\"",
+      "  }",
+      "  ",
+      "  // Return success response",
+      "  node returnSuccess \"data.set\" {",
+      "    assignments: {",
+      "      status: \"success\",",
+      "      message: \"Data processed successfully\",",
+      "      id: \"\\${processData.output.id}\"",
+      "    }",
+      "  }",
+      "  ",
+      "  // Return error response",
+      "  node returnError \"data.set\" {",
+      "    assignments: {",
+      "      status: \"error\",",
+      "      message: \"Invalid data: missing required fields\"",
+      "    }",
+      "  }",
+      "  ",
+      "  // Connections",
+      "  connect webhook -> validate",
+      "  connect validate.true -> processData",
+      "  connect processData -> saveData",
+      "  connect saveData -> returnSuccess",
+      "  connect validate.false -> returnError",
+      "}"
+    ],
+    "description": "Webhook processing workflow with validation"
+  },
+  
+  "Environment Variable": {
+    "prefix": "env",
+    "body": [
+      "env(\"${1:VARIABLE_NAME}\")"
+    ],
+    "description": "Reference an environment variable"
+  },
+  
+  "Current Timestamp": {
+    "prefix": "now",
+    "body": [
+      "now(${1:\"${2:yyyy-MM-dd HH:mm:ss}\"})"
+    ],
+    "description": "Get current timestamp with optional format"
+  },
+  
+  "File Reference": {
+    "prefix": "file",
+    "body": [
+      "file(\"${1:./path/to/file}\")"
+    ],
+    "description": "Reference a file"
+  },
+  
+  "Expression": {
+    "prefix": "expr",
+    "body": [
+      "\\${${1:expression}}"
+    ],
+    "description": "Create an expression"
+  }
+}
