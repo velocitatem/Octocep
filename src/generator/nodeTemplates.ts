@@ -152,8 +152,26 @@ export class IfTemplate implements NodeTemplate {
     // Parse single condition string into n8n's condition format
     const condition = params.condition || '';
     
-    // Enhanced condition parsing for various comparisons
-    const comparisonRegex = /(.+?)\s*(>=|<=|>|<|==|!=|contains|startsWith|endsWith|regex)\s*(.+)/i;
+    // Check if this is a complex JavaScript expression
+    if (this.isComplexExpression(condition)) {
+      // Parse complex expressions and convert to n8n format
+      const parsedConditions = this.parseComplexCondition(condition);
+      
+      mapped.conditions = {
+        options: {
+          version: 2,
+          leftValue: '',
+          caseSensitive: params.caseSensitive !== false,
+          typeValidation: 'strict'
+        },
+        combinator: parsedConditions.combinator,
+        conditions: parsedConditions.conditions
+      };
+      return mapped;
+    }
+    
+    // Enhanced condition parsing for simple comparisons
+    const comparisonRegex = /(.+?)\s*(>=|<=|>|<|==|!=|===|!==|contains|startsWith|endsWith|regex|includes)\s*(.+)/i;
     const match = condition.match(comparisonRegex);
     
     if (match) {
@@ -174,7 +192,8 @@ export class IfTemplate implements NodeTemplate {
             rightValue: this.parseValue(rightValue.trim()),
             operator: {
               type: this.getDataType(params.dataType || this.inferDataType(rightValue.trim())),
-              operation: this.mapOperation(operator.trim().toLowerCase())
+              operation: this.mapOperation(operator.trim().toLowerCase()),
+              name: `filter.operator.${this.mapOperation(operator.trim().toLowerCase())}`
             }
           }
         ]
@@ -234,30 +253,127 @@ export class IfTemplate implements NodeTemplate {
 
   private mapOperation(op: string): string {
     const operationMap: Record<string, string> = {
-      '==': 'eq',
-      '!=': 'ne',
+      '==': 'equals',
+      '===': 'equals',
+      '!=': 'notEquals',
+      '!==': 'notEquals',
       '>': 'gt',
       '<': 'lt',
       '>=': 'gte',
       '<=': 'lte',
       'contains': 'contains',
+      'includes': 'contains',
       'startswith': 'startsWith',
       'endswith': 'endsWith',
       'regex': 'regex',
-      'equal': 'eq',
-      'notequal': 'ne',
+      'equal': 'equals',
+      'equals': 'equals',
+      'notequal': 'notEquals',
       'larger': 'gt',
       'smaller': 'lt',
       'largerequal': 'gte',
       'smallerequal': 'lte',
-      'eq': 'eq',
-      'ne': 'ne',
+      'eq': 'equals',
+      'ne': 'notEquals',
       'gt': 'gt',
       'lt': 'lt',
       'gte': 'gte',
       'lte': 'lte'
     };
-    return operationMap[op.toLowerCase()] || 'eq';
+    return operationMap[op.toLowerCase()] || 'equals';
+  }
+
+  private isComplexExpression(condition: string): boolean {
+    // Check if the condition contains complex JavaScript patterns
+    const complexPatterns = [
+      /\|\|/,  // OR operator
+      /&&/,    // AND operator
+      /\.includes\(/,  // method calls
+      /\.toLowerCase\(/,
+      /\.toUpperCase\(/,
+      /\$\{.*\}/,  // template expressions
+      /\(/,    // function calls or grouped expressions
+    ];
+    
+    return complexPatterns.some(pattern => pattern.test(condition));
+  }
+
+  private parseComplexCondition(condition: string): { combinator: string, conditions: any[] } {
+    // Convert ${fetchUnread.output.subject.toLowerCase().includes('meet') || fetchUnread.output.body.toLowerCase().includes('meet')}
+    // to n8n format with proper node references
+    
+    // Remove ${} wrapper if present
+    const cleanCondition = condition.replace(/^\$\{|\}$/g, '');
+    
+    // Check for OR/AND operators
+    if (cleanCondition.includes('||')) {
+      const parts = cleanCondition.split('||').map(part => part.trim());
+      return {
+        combinator: 'or',
+        conditions: parts.map(part => this.parseConditionPart(part))
+      };
+    } else if (cleanCondition.includes('&&')) {
+      const parts = cleanCondition.split('&&').map(part => part.trim());
+      return {
+        combinator: 'and',
+        conditions: parts.map(part => this.parseConditionPart(part))
+      };
+    } else {
+      // Single complex condition
+      return {
+        combinator: 'and',
+        conditions: [this.parseConditionPart(cleanCondition)]
+      };
+    }
+  }
+
+  private parseConditionPart(part: string): any {
+    // Parse individual condition parts like:
+    // fetchUnread.output.subject.toLowerCase().includes('meet')
+    
+    // Extract node reference and method chain
+    const includesMatch = part.match(/(\w+)\.output\.(\w+)\.toLowerCase\(\)\.includes\(['"]([^'"]+)['"]\)/);
+    if (includesMatch) {
+      const [, nodeName, field, searchTerm] = includesMatch;
+      return {
+        id: this.generateId(),
+        leftValue: `{{ $('${nodeName}').item.json.${field} }}`,
+        rightValue: searchTerm,
+        operator: {
+          type: 'string',
+          operation: 'contains',
+          name: 'filter.operator.contains'
+        }
+      };
+    }
+
+    // Fallback for other patterns - convert to n8n expression format
+    const nodeRefMatch = part.match(/(\w+)\.output\.(\w+)/);
+    if (nodeRefMatch) {
+      const [, nodeName, field] = nodeRefMatch;
+      return {
+        id: this.generateId(),
+        leftValue: `{{ $('${nodeName}').item.json.${field} }}`,
+        rightValue: '',
+        operator: {
+          type: 'string',
+          operation: 'exists',
+          name: 'filter.operator.exists'
+        }
+      };
+    }
+
+    // Final fallback - use the entire expression
+    return {
+      id: this.generateId(),
+      leftValue: `{{ ${part} }}`,
+      rightValue: true,
+      operator: {
+        type: 'boolean',
+        operation: 'equals',
+        name: 'filter.operator.equals'
+      }
+    };
   }
 
   private getDataType(type: string | any): string {
@@ -322,76 +438,197 @@ export class IfTemplate implements NodeTemplate {
 // Schedule Trigger parameter mapping
 export class ScheduleTriggerTemplate implements NodeTemplate {
   mapParameters(params: Record<string, any>): Record<string, any> {
-    const triggerInterval = params.triggerInterval || params.interval || 'custom';
-    
     // Handle cron expressions
-    if (params.cron || triggerInterval === 'custom') {
+    if (params.cron || params.cronExpression) {
       const cronExpression = params.cron || params.cronExpression;
-      if (cronExpression) {
+      return this.parseCronExpression(cronExpression);
+    }
+    
+    const triggerInterval = params.triggerInterval || params.interval || 'minutes';
+    
+    // Handle predefined intervals using rule format
+    switch (triggerInterval) {
+      case 'seconds':
         return {
-          triggerInterval: 'custom',
-          expression: cronExpression
+          rule: {
+            interval: [
+              {
+                field: 'seconds'
+              }
+            ]
+          }
+        };
+      case 'minutes':
+        return {
+          rule: {
+            interval: [
+              {
+                field: 'minutes'
+              }
+            ]
+          }
+        };
+      case 'hours':
+        return {
+          rule: {
+            interval: [
+              {
+                field: 'hours'
+              }
+            ]
+          }
+        };
+      case 'days':
+        return {
+          rule: {
+            interval: [
+              {
+                field: 'days'
+              }
+            ]
+          }
+        };
+      default:
+        // Default to every minute
+        return {
+          rule: {
+            interval: [
+              {
+                field: 'minutes'
+              }
+            ]
+          }
+        };
+    }
+  }
+
+  private parseCronExpression(cronExpression: string): Record<string, any> {
+    const parts = cronExpression.trim().split(/\s+/);
+    
+    if (parts.length !== 5) {
+      // Invalid cron format, fallback to custom
+      return {
+        triggerInterval: 'custom',
+        expression: cronExpression
+      };
+    }
+
+    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+
+    // Analyze the cron pattern to determine the appropriate n8n rule format
+    if (this.isEveryPattern(minute) && this.isEveryPattern(hour) && 
+        this.isEveryPattern(dayOfMonth) && this.isEveryPattern(month) && 
+        this.isEveryPattern(dayOfWeek)) {
+      
+      // Check for step values (*/n patterns)
+      if (minute.startsWith('*/')) {
+        const stepValue = parseInt(minute.substring(2));
+        if (!isNaN(stepValue)) {
+          return {
+            rule: {
+              interval: [
+                {
+                  field: 'minutes'
+                }
+              ]
+            }
+          };
+        }
+      }
+      
+      // Every minute
+      if (minute === '*') {
+        return {
+          rule: {
+            interval: [
+              {
+                field: 'minutes'
+              }
+            ]
+          }
         };
       }
     }
-    
-    // Handle predefined intervals
-    const mapped: Record<string, any> = {
-      triggerInterval
-    };
-    
-    switch (triggerInterval) {
-      case 'seconds':
-        mapped.secondsInterval = params.secondsInterval || params.seconds || 30;
-        break;
-      case 'minutes':
-        mapped.minutesInterval = params.minutesInterval || params.minutes || 5;
-        break;
-      case 'hours':
-        mapped.hoursInterval = params.hoursInterval || params.hours || 1;
-        break;
-      case 'days':
-        mapped.daysInterval = params.daysInterval || params.days || 1;
-        if (params.triggerAtHour !== undefined) {
-          mapped.triggerAtHour = params.triggerAtHour;
+
+    // Check for hourly patterns (0 * * * *)
+    if (minute === '0' && this.isEveryPattern(hour) && 
+        this.isEveryPattern(dayOfMonth) && this.isEveryPattern(month) && 
+        this.isEveryPattern(dayOfWeek)) {
+      return {
+        rule: {
+          interval: [
+            {
+              field: 'hours'
+            }
+          ]
         }
-        if (params.triggerAtMinute !== undefined) {
-          mapped.triggerAtMinute = params.triggerAtMinute;
-        }
-        break;
-      case 'weeks':
-        mapped.weeksInterval = params.weeksInterval || params.weeks || 1;
-        if (params.triggerAtDay !== undefined) {
-          mapped.triggerAtDay = Array.isArray(params.triggerAtDay) 
-            ? params.triggerAtDay 
-            : [params.triggerAtDay];
-        }
-        if (params.triggerAtHour !== undefined) {
-          mapped.triggerAtHour = params.triggerAtHour;
-        }
-        if (params.triggerAtMinute !== undefined) {
-          mapped.triggerAtMinute = params.triggerAtMinute;
-        }
-        break;
-      case 'months':
-        mapped.monthsInterval = params.monthsInterval || params.months || 1;
-        if (params.triggerAtDayOfMonth !== undefined) {
-          mapped.triggerAtDayOfMonth = params.triggerAtDayOfMonth;
-        }
-        if (params.triggerAtHour !== undefined) {
-          mapped.triggerAtHour = params.triggerAtHour;
-        }
-        if (params.triggerAtMinute !== undefined) {
-          mapped.triggerAtMinute = params.triggerAtMinute;
-        }
-        break;
-      default:
-        // Default to hourly if no valid interval specified
-        mapped.triggerInterval = 'hours';
-        mapped.hoursInterval = 1;
+      };
     }
-    
-    return mapped;
+
+    // Check for daily patterns (0 0 * * *)
+    if (minute === '0' && hour === '0' && 
+        this.isEveryPattern(dayOfMonth) && this.isEveryPattern(month) && 
+        this.isEveryPattern(dayOfWeek)) {
+      return {
+        rule: {
+          interval: [
+            {
+              field: 'days'
+            }
+          ]
+        }
+      };
+    }
+
+    // Check for specific minute intervals
+    if (hour === '*' && this.isEveryPattern(dayOfMonth) && 
+        this.isEveryPattern(month) && this.isEveryPattern(dayOfWeek)) {
+      
+      if (minute.startsWith('*/')) {
+        // Every N minutes
+        return {
+          rule: {
+            interval: [
+              {
+                field: 'minutes'
+              }
+            ]
+          }
+        };
+      } else if (minute.includes(',')) {
+        // Specific minutes
+        return {
+          rule: {
+            interval: [
+              {
+                field: 'minutes'
+              }
+            ]
+          }
+        };
+      } else if (!isNaN(parseInt(minute))) {
+        // Specific minute each hour
+        return {
+          rule: {
+            interval: [
+              {
+                field: 'hours'
+              }
+            ]
+          }
+        };
+      }
+    }
+
+    // For complex patterns that don't fit n8n's simple rule format, use custom
+    return {
+      triggerInterval: 'custom',
+      expression: cronExpression
+    };
+  }
+
+  private isEveryPattern(cronPart: string): boolean {
+    return cronPart === '*' || cronPart === '*/1';
   }
 }
 
